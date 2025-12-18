@@ -1,23 +1,98 @@
 pipeline {
     agent any
 
+    parameters {
+        choice(
+            name: 'ACTION',
+            choices: ['apply', 'destroy'],
+            description: 'Choose apply to create infra or destroy to delete infra'
+        )
+    }
+
+    environment {
+        AWS_DEFAULT_REGION = 'ap-south-1'
+        ANSIBLE_CONFIG = 'ansible/ansible.cfg'
+        SSH_KEY = '/var/lib/jenkins/.ssh/jenkinskeylinux16dec.pem'
+    }
+
     stages {
-        stage('Terraform') {
+
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Terraform Init') {
             steps {
                 dir('terraform') {
                     sh 'terraform init'
-                    sh 'terraform apply -auto-approve'
                 }
             }
         }
 
-        stage('Ansible') {
+        stage('Terraform Apply / Destroy') {
+            steps {
+                dir('terraform') {
+                    sh '''
+                    if [ "$ACTION" = "apply" ]; then
+                        terraform apply -auto-approve
+                    else
+                        terraform destroy -auto-approve
+                    fi
+                    '''
+                }
+            }
+        }
+
+        stage('Wait for SSH') {
+            when {
+                expression { params.ACTION == 'apply' }
+            }
+            steps {
+                sh '''
+                echo "Waiting for EC2 SSH to be ready..."
+                for i in {1..15}; do
+                    nc -z 172.31.1.111 22 && echo "SSH is ready" && exit 0
+                    sleep 10
+                done
+                echo "ERROR: SSH not available"
+                exit 1
+                '''
+            }
+        }
+
+        stage('Ansible Configuration') {
+            when {
+                expression { params.ACTION == 'apply' }
+            }
             steps {
                 dir('ansible') {
-                    sh 'ansible-playbook -i inventory/aws_ec2.yaml playbooks/site.yaml'
+                    sh '''
+                    echo "Using Ansible config:"
+                    ansible --version
+
+                    echo "Inventory graph:"
+                    ansible-inventory -i inventory/aws_ec2.yaml --graph
+
+                    echo "Running Ansible playbook"
+                    ansible-playbook \
+                      -i inventory/aws_ec2.yaml \
+                      -u ubuntu \
+                      --private-key=$SSH_KEY \
+                      playbooks/site.yaml
+                    '''
                 }
             }
         }
     }
-}
 
+    post {
+        success {
+            echo "✅ PIPELINE COMPLETED SUCCESSFULLY"
+        }
+        failure {
+            echo "❌ PIPELINE FAILED – Check logs"
+        }
+    }
+}
