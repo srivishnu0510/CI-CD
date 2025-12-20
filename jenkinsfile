@@ -2,10 +2,11 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = "ap-south-1"
-        SSH_KEY    = "/var/lib/jenkins/.ssh/jenkinskeylinux16dec.pem"
-        TF_DIR     = "terraform"
-        ANSIBLE_DIR= "ansible"
+        AWS_REGION  = "ap-south-1"
+        SSH_KEY     = "/var/lib/jenkins/.ssh/jenkinskeylinux16dec.pem"
+        TF_DIR      = "terraform"
+        ANSIBLE_DIR = "ansible"
+        SSH_USER    = "ec2-user"
     }
 
     stages {
@@ -35,18 +36,18 @@ pipeline {
         stage('Wait for EC2 SSH (Ansible Native)') {
             steps {
                 dir("${ANSIBLE_DIR}") {
-                    sh '''
+                    sh """
                         echo "Inventory check:"
                         ansible-inventory -i inventory/aws_ec2.yaml --graph
 
                         echo "Waiting for SSH using Ansible..."
                         ansible aws_ec2 \
                         -i inventory/aws_ec2.yaml \
-                        -u ubuntu \
+                        -u ${SSH_USER} \
                         --private-key=${SSH_KEY} \
                         -m wait_for_connection \
                         -a timeout=300
-                    '''
+                    """
                 }
             }
         }
@@ -54,15 +55,15 @@ pipeline {
         stage('Ansible Configuration') {
             steps {
                 dir("${ANSIBLE_DIR}") {
-                    sh '''
+                    sh """
                         echo "Running Ansible playbook on aws_ec2"
                         ansible-playbook \
                         -i inventory/aws_ec2.yaml \
                         -l aws_ec2 \
-                        -u ubuntu \
+                        -u ${SSH_USER} \
                         --private-key=${SSH_KEY} \
                         playbooks/site.yaml
-                    '''
+                    """
                 }
             }
         }
