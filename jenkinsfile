@@ -2,10 +2,8 @@ pipeline {
     agent any
 
     environment {
-        SSH_KEY     = "/var/lib/jenkins/.ssh/jenkinskeylinux16dec.pem"
         TF_DIR      = "terraform"
         ANSIBLE_DIR = "ansible"
-        SSH_USER    = "ec2-user"
     }
 
     stages {
@@ -43,15 +41,13 @@ pipeline {
             }
         }
 
-        stage('Run Ansible Playbook') {
+        stage('Run Ansible Playbook (env_dev only)') {
             steps {
                 dir("${ANSIBLE_DIR}") {
                     sh '''
                         ansible-playbook \
                         -i inventory/aws_ec2.yaml \
-                        -l aws_ec2 \
-                        -u ec2-user \
-                        --private-key=/var/lib/jenkins/.ssh/jenkinskeylinux16dec.pem \
+                        -l env_dev \
                         playbooks/site.yaml
                     '''
                 }
