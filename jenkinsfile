@@ -1,18 +1,11 @@
 pipeline {
     agent any
 
-    parameters {
-        choice(
-            name: 'ACTION',
-            choices: ['apply', 'destroy'],
-            description: 'apply = create infra, destroy = delete infra'
-        )
-    }
-
     environment {
-        AWS_DEFAULT_REGION = 'ap-south-1'
-        ANSIBLE_CONFIG = 'ansible/ansible.cfg'
-        SSH_KEY = '/var/lib/jenkins/.ssh/jenkinskeylinux16dec.pem'
+        AWS_REGION = "ap-south-1"
+        SSH_KEY    = "/var/lib/jenkins/.ssh/jenkinskeylinux16dec.pem"
+        TF_DIR     = "terraform"
+        ANSIBLE_DIR= "ansible"
     }
 
     stages {
@@ -25,65 +18,50 @@ pipeline {
 
         stage('Terraform Init') {
             steps {
-                dir('terraform') {
+                dir("${TF_DIR}") {
                     sh 'terraform init'
                 }
             }
         }
 
-        stage('Terraform Apply / Destroy') {
+        stage('Terraform Apply') {
             steps {
-                dir('terraform') {
-                    sh '''
-                    if [ "$ACTION" = "destroy" ]; then
-                        echo "Destroying infrastructure..."
-                        terraform destroy -auto-approve
-                        exit 0
-                    else
-                        echo "Applying infrastructure..."
-                        terraform apply -auto-approve
-                    fi
-                    '''
+                dir("${TF_DIR}") {
+                    sh 'terraform apply -auto-approve'
                 }
             }
         }
 
         stage('Wait for EC2 SSH (Ansible Native)') {
-            when {
-                expression { params.ACTION == 'apply' }
-            }
             steps {
-                dir('ansible') {
+                dir("${ANSIBLE_DIR}") {
                     sh '''
-                    echo "Inventory check:"
-                    ansible-inventory -i inventory/aws_ec2.yaml --graph
+                        echo "Inventory check:"
+                        ansible-inventory -i inventory/aws_ec2.yaml --graph
 
-                    echo "Waiting for SSH using Ansible (no nc required)..."
-                    ansible env_dev \
-                      -i inventory/aws_ec2.yaml \
-                      -u ubuntu \
-                      --private-key=$SSH_KEY \
-                      -m wait_for_connection \
-                      -a "timeout=300"
+                        echo "Waiting for SSH using Ansible..."
+                        ansible aws_ec2 \
+                        -i inventory/aws_ec2.yaml \
+                        -u ubuntu \
+                        --private-key=${SSH_KEY} \
+                        -m wait_for_connection \
+                        -a timeout=300
                     '''
                 }
             }
         }
 
         stage('Ansible Configuration') {
-            when {
-                expression { params.ACTION == 'apply' }
-            }
             steps {
-                dir('ansible') {
+                dir("${ANSIBLE_DIR}") {
                     sh '''
-                    echo "Running Ansible playbook on env_dev only"
-                    ansible-playbook \
-                      -i inventory/aws_ec2.yaml \
-                      -l env_dev \
-                      -u ubuntu \
-                      --private-key=$SSH_KEY \
-                      playbooks/site.yaml
+                        echo "Running Ansible playbook on aws_ec2"
+                        ansible-playbook \
+                        -i inventory/aws_ec2.yaml \
+                        -l aws_ec2 \
+                        -u ubuntu \
+                        --private-key=${SSH_KEY} \
+                        playbooks/site.yaml
                     '''
                 }
             }
@@ -92,7 +70,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ PIPELINE COMPLETED SUCCESSFULLY"
+            echo "✅ PIPELINE SUCCESSFULLY COMPLETED"
         }
         failure {
             echo "❌ PIPELINE FAILED – Check logs"
