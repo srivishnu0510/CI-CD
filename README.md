@@ -39,25 +39,6 @@ It also integrates Auto Scaling with an Application Load Balancer (ALB) to ensur
 -Terraform & Ansible installed
 -SSH key pair for EC2
 
-**Repository Structure**
-.
-├── jenkins-pipeline
-│   └── Jenkinsfile
-├── terraform
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── provider.tf
-├── ansible
-│   ├── playbook.yml
-│   ├── roles/
-│   │   └── nginx/
-│   │       ├── tasks/main.yml
-│   │       └── templates/
-│   └── dynamic-inventory.py
-└── README.md
-
-
 **Jenkins Pipeline Stages**
 1. Checkout Stage-Pulls latest code from GitHub
 2. Terraform Init & Apply-Provisions VPC, Subnets, EC2, ALB, Auto Scaling Group,Outputs instance IPs to dynamic inventory
